@@ -46,7 +46,7 @@ data Tokenizer = Tokenizer {
     tknrDFA:: DFA,
     tknrID:: String,
     tknrIgnore:: Bool,
-    tknrDeadStates:: Set.Set Int,
+    tknrDeadState:: Maybe Int,
     tknrState:: Maybe Int
 }
 
@@ -67,12 +67,12 @@ instance Show Token where
                  show (tokenEnd token) ++ ")"
 
 -- | Create a new tokenizer with a DFA, String ID and whether to ignore its tokens when tokenizing.
-tknrNew:: Set.Set Char -> Int -> [Int] -> [Int] -> [((Int, Char), Int)] -> String -> Bool -> Tokenizer
-tknrNew alphabet startState acceptStates deadStates transitionList tkid ignore = Tokenizer {
+tknrNew:: Set.Set Char -> Int -> Maybe Int -> [Int] -> [((Int, Char), Int)] -> String -> Bool -> Tokenizer
+tknrNew alphabet startState deadState acceptStates transitionList tkid ignore = Tokenizer {
     tknrDFA = verifiedDFA,
     tknrID = tkid,
     tknrIgnore = ignore,
-    tknrDeadStates = Set.fromList deadStates,
+    tknrDeadState = Just $ fromMaybe newDeadState deadState,
     tknrState = Nothing
 } where
     verifiedDFA
@@ -82,8 +82,8 @@ tknrNew alphabet startState acceptStates deadStates transitionList tkid ignore =
             error ("Invalid transitions " ++
                    show invalidStateTransitions ++
                    " to non-specified state for tokenizer " ++ tkid)
-        | invalidStates = 
-            error ("Not all transitions defined for states" ++ 
+        | invalidStates =
+            error ("Not all transitions defined for states" ++
                    show invalidStatesList ++
                    "for tokenizer " ++ tkid)
         | otherwise = DFA {
@@ -92,14 +92,18 @@ tknrNew alphabet startState acceptStates deadStates transitionList tkid ignore =
             dfaTransitions = transitions,
             dfaStartState = startState
         }
-
-    transitions = expandTransitions $ Map.fromList transitionList
+    alphabetList = Set.toList alphabet
+    transitions = expandedTransitions `Map.union` Map.fromList transitionList
     -- In some DFA notation when a transition is not specified it is assumed that it immediately
-    -- rejects the string. This can be done creating a additional 'dead state' 
-    expandTransitions:: Map.Map (Int, Char) Int
-    expandTransitions = let
-        deadStateNo = head [q | q <- [0..], q `notElem` fromStates]
-        newTransitions = [((qf, x), qt) | ((qf, x), qt)]
+    -- rejects the string. This can be done by creating a additional 'dead state' to which all
+    -- missing transitions point to. This state will transition to itself with all symbols.
+    expandedTransitions = let
+        newTransitions = [((q, c), newDeadState) | q <- invalidStatesList, c <- alphabetList, (q, c) `Map.notMember` transitions]
+        deadTransitions = [((newDeadState, c), newDeadState) | c <- alphabetList]
+        in Map.fromList newTransitions
+    -- This will calculate the first state number that isn't already in the states list.
+    -- Because haskell is haskell, it's an infinite list, of which we only get the first value.
+    newDeadState = head [q | q <- [0..], q `notElem` fromStates]
     -- Valid chars: All transitions must specify chars that are part of the alphabet
     invalidChars = not $ null invalidCharList
     invalidCharList = [x | ((_, x), _) <- transitionList, x `Set.notMember` alphabet]
@@ -111,7 +115,7 @@ tknrNew alphabet startState acceptStates deadStates transitionList tkid ignore =
     -- Valid states: for each state there must be one and only one transition for ALL elements
     -- of the alphabet. Before checking this we expand the transition list.
     invalidStates = not $ null invalidStatesList
-    invalidStatesList = [q | q <- nub fromStates, c <- Set.toList alphabet, (q, c) `Map.notMember` transitions]
+    invalidStatesList = [q | q <- nub fromStates, c <- alphabetList, (q, c) `Map.notMember` transitions]
 
 
 -- | Determine if a char is part of a tokenizer's defined alphabet.
@@ -130,16 +134,16 @@ tknrValidState tokenizer = let
 -- (the actual relevant information is at the end of the conversation)
 -- | Calcualate the next state of a tokenizer given a char.
 tknrStep :: Tokenizer -> Char -> Tokenizer
-tknrStep tokenizer@Tokenizer { tknrState = maybeState, tknrDFA = dfa, tknrDeadStates = deadStates } char = tokenizer {
-    tknrState = newState >>= checkDeadState
+tknrStep tokenizer@Tokenizer { tknrState = maybeState, tknrDFA = dfa, tknrDeadState = deadState } char = tokenizer {
+    tknrState = dfaTransition dfa (fromMaybe (dfaStartState dfa) maybeState) char >>= checkDeadState
 } where
-    state = fromMaybe (dfaStartState dfa) maybeState
-    newState = dfaTransition dfa state char
-    checkDeadState s = if s `elem` deadStates then Nothing else Just s
+    checkDeadState s
+        | Just s == deadState = Just s
+        | otherwise           = Nothing
 
 -- | This utility function creates a tokenizer that accepts a single character.
 tknrSingleChar:: Char -> String -> Bool -> Tokenizer
-tknrSingleChar c = tknrNew (Set.singleton c) 0 [1] [2] transitions
+tknrSingleChar c = tknrNew (Set.singleton c) 0 (Just 1) [2] transitions
     where
         transitions = [((0, c), 1), ((1, c), 2), ((2, c), 2)]
 
@@ -288,8 +292,8 @@ whitespaceTransitions = [((0, ' '), 1), ((0, '\t'), 1), ((1, ' '), 1), ((1, '\t'
 
 plusTokenizer = tknrSingleChar '+' "PLUS" False
 minusTokenizer = tknrSingleChar '-' "MINUS" False
-whitespaceTokenizer = tknrNew lexerWhitespace 0 [1] [] whitespaceTransitions "WHITESPACE" True
-commentTokenizer = tknrNew lexerFullAlphabet 0 [2] [3] commentTransitions "COMMENT" False
+whitespaceTokenizer = tknrNew lexerWhitespace 0 (Just 1) [] whitespaceTransitions "WHITESPACE" True
+commentTokenizer = tknrNew lexerFullAlphabet 0 (Just 2) [3] commentTransitions "COMMENT" False
 
 main:: IO ()
 main = do
