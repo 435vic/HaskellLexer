@@ -9,7 +9,7 @@
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Maybe
-import Data.List (sortBy)
+import Data.List (nub)
 import Data.Ord (comparing)
 import Debug.Trace (trace, traceStack)
 
@@ -38,20 +38,15 @@ dfaAccept dfa = recurse (dfaStartState dfa)
         recurse state [] = state `elem` dfaAcceptStates dfa
         recurse state (x:xs) = recurse (fromJust $ dfaTransition dfa state x) xs
 
--- | This utility function creates a DFA that accepts a single character.
-dfaSingleChar:: Char -> DFA
-dfaSingleChar c = DFA {
-    dfaAlphabet = Set.fromList [c],
-    dfaTransitions = Map.fromList [((0, c), 1), ((1, c), 2), ((2, c), 2)],
-    dfaStartState = 0,
-    dfaAcceptStates = Set.fromList [1]
-}
-
 -- | Tokenizer is an individual tokenizer. It detects a single type of token.
+-- It's built from a DFA object and a string identifier. The `tknrIgnore` option
+-- provides a way to add tokenizers that while needed, should not necessarily be
+-- displayed along with other tokens.
 data Tokenizer = Tokenizer {
     tknrDFA:: DFA,
     tknrID:: String,
     tknrIgnore:: Bool,
+    tknrDeadStates:: Set.Set Int,
     tknrState:: Maybe Int
 }
 
@@ -71,6 +66,45 @@ instance Show Token where
                  show (tokenStart token)++ ", " ++
                  show (tokenEnd token) ++ ")"
 
+-- | Create a new tokenizer with a DFA, String ID and whether to ignore its tokens when tokenizing.
+tknrNew:: Set.Set Char -> Int -> [Int] -> [Int] -> [((Int, Char), Int)] -> String -> Bool -> Tokenizer
+tknrNew alphabet startState acceptStates deadStates transitionList tkid ignore = Tokenizer {
+    tknrDFA = verifiedDFA,
+    tknrID = tkid,
+    tknrIgnore = ignore,
+    tknrDeadStates = Set.fromList deadStates,
+    tknrState = Nothing
+} where
+    verifiedDFA
+        | invalidChars =
+            error ("Invalid transition characters " ++ show invalidCharList ++ " for tokenizer " ++ tkid)
+        | invalidTransitions =
+            error ("Invalid transitions " ++
+                   show invalidStateTransitions ++
+                   " to non-specified state for tokenizer " ++ tkid)
+        | invalidStates = error ("Not all transitions defined for states for tokenizer " ++ tkid)
+        | otherwise = DFA {
+            dfaAlphabet = alphabet,
+            dfaAcceptStates = Set.fromList acceptStates,
+            dfaTransitions = transitions,
+            dfaStartState = startState
+        }
+
+    transitions = Map.fromList transitionList
+    -- Valid chars: All transitions must specify chars that are part of the alphabet
+    invalidChars = not $ null invalidCharList
+    invalidCharList = [x | ((_, x), _) <- transitionList, x `Set.notMember` alphabet]
+    -- Valid transitions: All states transitioned to must exist (i.e) have at least one entry
+    -- where the state exists as a source state
+    invalidTransitions = not $ null invalidStateTransitions
+    fromStates = [q | ((q, _), _) <- transitionList]
+    invalidStateTransitions = [((qf, x), qt) | ((qf, x), qt) <- transitionList, qt `notElem` fromStates]
+    -- Valid states: for each state there must be one and only one transition for ALL elements
+    -- of the alphabet
+    invalidStates = not $ null invalidStatesList
+    invalidStatesList = [q | q <- nub fromStates, c <- Set.toList alphabet, (q, c) `Map.notMember` transitions]
+
+
 -- | Determine if a char is part of a tokenizer's defined alphabet.
 tknrValidChar:: Tokenizer -> Char -> Bool
 tknrValidChar tokenizer char = char `Set.member` dfaAlphabet (tknrDFA tokenizer)
@@ -87,12 +121,18 @@ tknrValidState tokenizer = let
 -- (the actual relevant information is at the end of the conversation)
 -- | Calcualate the next state of a tokenizer given a char.
 tknrStep :: Tokenizer -> Char -> Tokenizer
-tknrStep tokenizer@Tokenizer { tknrState = Nothing, tknrDFA = dfa } char = tokenizer {
-    tknrState = dfaTransition dfa (dfaStartState dfa) char
-}
-tknrStep tokenizer@Tokenizer { tknrState = Just state, tknrDFA = dfa } char = tokenizer {
-    tknrState = dfaTransition dfa state char
-}
+tknrStep tokenizer@Tokenizer { tknrState = maybeState, tknrDFA = dfa, tknrDeadStates = deadStates } char = tokenizer {
+    tknrState = newState >>= checkDeadState
+} where
+    state = fromMaybe (dfaStartState dfa) maybeState
+    newState = dfaTransition dfa state char
+    checkDeadState s = if s `elem` deadStates then Nothing else Just s
+
+-- | This utility function creates a tokenizer that accepts a single character.
+tknrSingleChar:: Char -> String -> Bool -> Tokenizer
+tknrSingleChar c = tknrNew (Set.singleton c) 0 [1] [2] transitions
+    where
+        transitions = [((0, c), 1), ((1, c), 2), ((2, c), 2)]
 
 -- Tokenize is a function that given a string and a list of DFAs will split it into tokens.
 -- 1. It needs to store the current string
@@ -104,6 +144,13 @@ tknrStep tokenizer@Tokenizer { tknrState = Just state, tknrDFA = dfa } char = to
 -- 5. IF multiple DFAs are active, we ignore the DFA that finished matching (maximal munch rule).
 -- 6. If multiple DFAs finish matching at the same position, we choose the highest one on the
 --    provided DFA list.
+
+-- Tokenizers should have dead states. It's worth keeping in mind that every token detected must be accepted
+-- by the DFA by the official definition.
+
+-- . 0
+--   ^
+-- 
 
 -- DFA match length means the current index of the string + 1
 
@@ -128,7 +175,7 @@ _debugTokenize tokenizers str tokens start idx =
     "index: " ++ show idx ++ "\n"
 
 _tokenizeInternal:: [Tokenizer] -> String -> [Token] -> Int -> Int -> [Token]
--- _tokenizeInternal a b c d e | trace (_debugTokenize a b c d e) False = undefined
+_tokenizeInternal a b c d e | trace (_debugTokenize a b c d e) False = undefined
 
 -- base case: The string is fully consumed so we know everything was tokenized
 _tokenizeInternal _ "" tokens _ _ = tokens
@@ -136,8 +183,8 @@ _tokenizeInternal _ "" tokens _ _ = tokens
 -- substrings if a token is detected
 _tokenizeInternal tokenizers inputString tokens currentStart currentIndex
     -- NO tokenizers are active: character is not valid (or we just started)
-    | currentIndex /= 0 && null matches =
-        error $ "Unexpected char '" ++ [prevChar] ++ "' at position " ++ show prevIndex
+    | currentIndex /= 0 && not (any (isJust . tknrState) tokenizers) =
+        error $ "Unexpected char '" ++ [prevChar] ++ "' at position " ++ show prevPosition
     -- We have at least one match (we choose the first)
     -- 'matches' contains all matching tokenizers, even if they aren't finished yet
     -- If the most important one isn't finished yet, we can discard the rest
@@ -161,8 +208,8 @@ _tokenizeInternal tokenizers inputString tokens currentStart currentIndex
     where
         endOfString = currentIndex >= length inputString
         currentChar = inputString !! currentIndex
-        prevIndex = currentIndex-1
-        prevChar = inputString !! prevIndex
+        prevPosition = currentStart + currentIndex - 1
+        prevChar = inputString !! (currentIndex - 1)
         -- Used for creating tokens
         (prefix, suffix) = splitAt currentIndex inputString
         -- Next iteration of tokenizers
@@ -178,9 +225,11 @@ _tokenizeInternal tokenizers inputString tokens currentStart currentIndex
         -- A tokenizer has a complete match if it reaches an *accepted* state at the end of a
         -- *valid* string. Which means the valid string ends as soon as an invalid character
         -- appears in the input string.
-        tknrFinishedMatching tknr = not (tknrValidNow tknr) && tknrValidState tknr
-        tknrPartiallyMatching tknr = isJust $ tknrState tknr
-        matches = filter tknrPartiallyMatching tokenizers
+        tknrFinishedMatching tknr = not (tknrValidNow tknr)
+        -- For more complicated matces the solution would be to process them at a tree level,
+        -- not token level. For example, the minus (-) sign is both a negative symbol and the
+        -- subtraction operator. The distinction would be made once the tokens are processed.
+        matches = filter tknrValidState tokenizers
         matchedTokenizer = head matches
 
 tokenize:: [Tokenizer] -> String -> [Token]
@@ -209,38 +258,34 @@ lexerLowercase = Set.fromList ['a'..'z']
 lexerUppercase = Set.fromList ['A'..'Z']
 lexerNumbers = Set.fromList ['0'..'9']
 lexerSymbols = Set.fromList ['=', '+', '-', '*', '/', '^']
+lexerWhitespace = Set.fromList [' ', '\t']
 lexerLetters = lexerLowercase `Set.union` lexerUppercase
 lexerAlphanumeric = lexerLetters `Set.union` lexerNumbers
-lexerFullAlphabet = lexerAlphanumeric `Set.union` lexerSymbols
+lexerFullAlphabet = lexerAlphanumeric `Set.union` lexerSymbols `Set.union` lexerWhitespace
 
 ----------  Comments  -----------
 
--- When state == 0, only the / charater transitions to
+-- When state == 0, only the / charater transitions to 1, otherwise 3
+-- When state == 1, only the / character transitions to 2, otherwise 3
+-- When state == 2, all characters transition to 2
+-- state 3 is a dead state
 
-
-commentTransitions = map (\x -> ((2, x), 2)) (Set.toList lexerAlphanumeric) ++
-    ((1, '/'), 2) : map (\x -> ((1, x), 2)) (Set.toList lexerAllExceptSlash) ++
-    ((0, '/'), 1) : map (\x -> ((0, x), 1)) (Set.toList lexerAllExceptSlash)
+commentTransitions = map (\x -> ((2, x), 2)) (Set.toList lexerFullAlphabet) ++
+    map (\x -> ((3, x), 3)) (Set.toList lexerFullAlphabet) ++
+    ((1, '/'), 2) : map (\x -> ((1, x), 3)) (Set.toList lexerAllExceptSlash) ++
+    ((0, '/'), 1) : map (\x -> ((0, x), 3)) (Set.toList lexerAllExceptSlash)
     where
-        lexerAllExceptSlash = lexerAlphanumeric `Set.difference` Set.singleton '/'
+        lexerAllExceptSlash = lexerFullAlphabet `Set.difference` Set.singleton '/'
 
+whitespaceTransitions = [((0, ' '), 1), ((0, '\t'), 1), ((1, ' '), 1), ((1, '\t'), 1)]
 
-plusTokenizer = Tokenizer {
-    tknrDFA = dfaSingleChar '+',
-    tknrID = "PLUS",
-    tknrIgnore = False,
-    tknrState = Nothing
-}
-
-minusTokenizer = Tokenizer {
-    tknrDFA = dfaSingleChar '-',
-    tknrID = "MINUS",
-    tknrIgnore = False,
-    tknrState = Nothing
-}
+plusTokenizer = tknrSingleChar '+' "PLUS" False
+minusTokenizer = tknrSingleChar '-' "MINUS" False
+whitespaceTokenizer = tknrNew lexerWhitespace 0 [1] [] whitespaceTransitions "WHITESPACE" True
+commentTokenizer = tknrNew lexerFullAlphabet 0 [2] [3] commentTransitions "COMMENT" False
 
 main:: IO ()
 main = do
     -- print (dfaAccept dfaDivBy4 "10100")
-    let result = tokenize [plusTokenizer, minusTokenizer] "-+--+-"
+    let result = tokenize [commentTokenizer, plusTokenizer, minusTokenizer, whitespaceTokenizer] "-+-/ /+-"
     result `seq` print result
