@@ -1,15 +1,25 @@
--- Activity 2.3 Arithmetic Lexer
--- Author: Victor Quintana - A01643020
--- DISCLAIMER: ChatGPT and Github Copilot were consulted along with other online sources
--- \*The actual algorithm is my own design*, following programming patterns I found in online code
--- and as written by the LLMs consulted.
--- Most of my interactions with ChatGPT can be found in the following conversation link:
--- https://chat.openai.com/share/974e55de-ff5f-4de2-aae7-4b664a34edca
+{-# OPTIONS_GHC -Wno-unused-imports #-}
+
+{- |
+Module      :  Lexer
+Description :  Lexer implemented using DFAs
+Copyright   :  (c) Victor Quintana A01643020
+License     :  MIT
+
+Maintainer  :  A01643020@tec.mx
+
+Lexer is a tokenizer implemented using DFAs.
+DISCLAIMER: ChatGPT and Github Copilot were consulted along with other online sources
+*The actual algorithm is my own design*, following programming patterns I found in online code
+and as written by the LLMs consulted.
+Most of my interactions with ChatGPT can be found in the following conversation link:
+https://chat.openai.com/share/974e55de-ff5f-4de2-aae7-4b664a34edca
+-}
+module Lexer where
 
 import Data.List (nub)
 import Data.Map.Strict qualified as Map
 import Data.Maybe
-import Data.Ord (comparing)
 import Data.Set qualified as Set
 import Debug.Trace (trace, traceShow, traceStack)
 
@@ -203,7 +213,7 @@ tknrSingleChar c = tknrNew (Set.singleton c) 0 Nothing [2] transitions
 --  ^
 
 _debugTokenize :: [Tokenizer] -> [Tokenizer] -> String -> [Token] -> Int -> Int -> String
-_debugTokenize tokenizers currentTokenizers str tokens start idx =
+_debugTokenize _ currentTokenizers str tokens start idx =
     "\n--------------\ntokenizer call:\n"
         ++ "tokenizers: "
         ++ show currentTokenizers
@@ -258,7 +268,7 @@ _tokenizeInternal tokenizers currentTokenizers inputString tokens currentStart c
     endOfString = currentIndex >= length inputString
     currentChar = inputString !! currentIndex
     -- Used for creating tokens
-    (prefix, suffix) = splitAt currentIndex inputString
+    (_, suffix) = splitAt currentIndex inputString
     -- Next iteration of tokenizers, we only update the ones that are currently active
     nextTokenizers = map (`tknrStep` currentChar) activeTokenizers
     -- A tokenizer is considered active when it is in a non-dead state.
@@ -287,47 +297,3 @@ _tokenizeInternal tokenizers currentTokenizers inputString tokens currentStart c
 
 tokenize :: [Tokenizer] -> String -> [Token]
 tokenize tokenizers inputString = _tokenizeInternal tokenizers [] inputString [] 0 0
-
---- Examples ---
-
--- dfaDivBy4:: DFA
--- dfaDivBy4 = DFA {
---     dfaAlphabet = ['0', '1'],
---     dfaTransitions = Map.fromList [
---         ((0, '0'), 1),
---         ((0, '1'), 0),
---         ((1, '0'), 2),
---         ((1, '1'), 0),
---         ((2, '0'), 2),
---         ((2, '1'), 0)
---     ],
---     dfaStartState = 0,
---     dfaAcceptStates = [2]
--- }
-
--------- Lexer Constants --------
-
-lexerLowercase = Set.fromList ['a' .. 'z']
-lexerUppercase = Set.fromList ['A' .. 'Z']
-lexerNumbers = Set.fromList ['0' .. '9']
-lexerSymbols = Set.fromList ['=', '+', '-', '*', '/', '^']
-lexerWhitespace = Set.fromList [' ', '\t']
-lexerLetters = lexerLowercase `Set.union` lexerUppercase
-lexerAlphanumeric = lexerLetters `Set.union` lexerNumbers
-lexerFullAlphabet = lexerAlphanumeric `Set.union` lexerSymbols `Set.union` lexerWhitespace
-
-commentTransitions = ((0, '/'), 1) : ((1, '/'), 2) : [((2, x), 2) | x <- Set.toList lexerFullAlphabet]
-
--- This would match any and all sequences of whitespace, as we don't really care how long is it
-whitespaceTransitions = [((0, ' '), 1), ((0, '\t'), 1), ((1, ' '), 1), ((1, '\t'), 1)]
-
-plusTokenizer = tknrSingleChar '+' "PLUS" False
-minusTokenizer = tknrSingleChar '-' "MINUS" False
-whitespaceTokenizer = tknrNew lexerWhitespace 0 Nothing [1] whitespaceTransitions "WHITESPACE" True
-commentTokenizer = tknrNew lexerFullAlphabet 0 Nothing [2] commentTransitions "COMMENT" False
-
-main :: IO ()
-main = do
-    -- print (dfaAccept dfaDivBy4 "10100")
-    let result = tokenize [commentTokenizer, plusTokenizer, minusTokenizer, whitespaceTokenizer] "++--/ /+-"
-    result `seq` print result
