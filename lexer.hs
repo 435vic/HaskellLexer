@@ -93,14 +93,15 @@ tknrNew alphabet startState deadState acceptStates transitionList tkid ignore = 
             dfaStartState = startState
         }
     alphabetList = Set.toList alphabet
-    transitions = expandedTransitions `Map.union` Map.fromList transitionList
+    transitionMap = Map.fromList transitionList
+    transitions = expandedTransitions `Map.union` transitionMap
     -- In some DFA notation when a transition is not specified it is assumed that it immediately
     -- rejects the string. This can be done by creating a additional 'dead state' to which all
     -- missing transitions point to. This state will transition to itself with all symbols.
     expandedTransitions = let
-        newTransitions = [((q, c), newDeadState) | q <- invalidStatesList, c <- alphabetList, (q, c) `Map.notMember` transitions]
+        newTransitions = [((q, c), newDeadState) | q <- fromStates, c <- alphabetList, (q, c) `Map.notMember` transitionMap]
         deadTransitions = [((newDeadState, c), newDeadState) | c <- alphabetList]
-        in Map.fromList newTransitions
+        in Map.fromList $ newTransitions ++ deadTransitions
     -- This will calculate the first state number that isn't already in the states list.
     -- Because haskell is haskell, it's an infinite list, of which we only get the first value.
     newDeadState = head [q | q <- [0..], q `notElem` fromStates]
@@ -110,12 +111,12 @@ tknrNew alphabet startState deadState acceptStates transitionList tkid ignore = 
     -- Valid transitions: All states transitioned to must exist (i.e) have at least one entry
     -- where the state exists as a source state
     invalidTransitions = not $ null invalidStateTransitions
-    fromStates = [q | ((q, _), _) <- transitionList]
+    fromStates = nub [q | ((q, _), _) <- transitionList]
     invalidStateTransitions = [((qf, x), qt) | ((qf, x), qt) <- transitionList, qt `notElem` fromStates]
     -- Valid states: for each state there must be one and only one transition for ALL elements
     -- of the alphabet. Before checking this we expand the transition list.
     invalidStates = not $ null invalidStatesList
-    invalidStatesList = [q | q <- nub fromStates, c <- alphabetList, (q, c) `Map.notMember` transitions]
+    invalidStatesList = nub [q | q <- fromStates, c <- alphabetList, (q, c) `Map.notMember` transitions]
 
 
 -- | Determine if a char is part of a tokenizer's defined alphabet.
@@ -138,12 +139,12 @@ tknrStep tokenizer@Tokenizer { tknrState = maybeState, tknrDFA = dfa, tknrDeadSt
     tknrState = dfaTransition dfa (fromMaybe (dfaStartState dfa) maybeState) char >>= checkDeadState
 } where
     checkDeadState s
-        | Just s == deadState = Just s
-        | otherwise           = Nothing
+        | Just s == deadState = Nothing
+        | otherwise           = Just s
 
 -- | This utility function creates a tokenizer that accepts a single character.
 tknrSingleChar:: Char -> String -> Bool -> Tokenizer
-tknrSingleChar c = tknrNew (Set.singleton c) 0 (Just 1) [2] transitions
+tknrSingleChar c = tknrNew (Set.singleton c) 0 Nothing [2] transitions
     where
         transitions = [((0, c), 1), ((1, c), 2), ((2, c), 2)]
 
@@ -278,22 +279,15 @@ lexerLetters = lexerLowercase `Set.union` lexerUppercase
 lexerAlphanumeric = lexerLetters `Set.union` lexerNumbers
 lexerFullAlphabet = lexerAlphanumeric `Set.union` lexerSymbols `Set.union` lexerWhitespace
 
-commentTransitions =
-    -- Dead state: if the first two characters received are not slashes, we move here
-    map (\x -> ((3, x), 3)) (Set.toList lexerFullAlphabet) ++
-    map (\x -> ((2, x), 2)) (Set.toList lexerFullAlphabet) ++
-    ((1, '/'), 2) : map (\x -> ((1, x), 3)) (Set.toList lexerAllExceptSlash) ++
-    ((0, '/'), 1) : map (\x -> ((0, x), 3)) (Set.toList lexerAllExceptSlash)
-    where
-        lexerAllExceptSlash = lexerFullAlphabet `Set.difference` Set.singleton '/'
+commentTransitions = ((0, '/'), 1) : ((1, '/'), 2) : [((2, x), 2) | x <- Set.toList lexerFullAlphabet]
 
 -- This would match any and all sequences of whitespace, as we don't really care how long is it
 whitespaceTransitions = [((0, ' '), 1), ((0, '\t'), 1), ((1, ' '), 1), ((1, '\t'), 1)]
 
 plusTokenizer = tknrSingleChar '+' "PLUS" False
 minusTokenizer = tknrSingleChar '-' "MINUS" False
-whitespaceTokenizer = tknrNew lexerWhitespace 0 (Just 1) [] whitespaceTransitions "WHITESPACE" True
-commentTokenizer = tknrNew lexerFullAlphabet 0 (Just 2) [3] commentTransitions "COMMENT" False
+whitespaceTokenizer = tknrNew lexerWhitespace 0 Nothing [1] whitespaceTransitions "WHITESPACE" True
+commentTokenizer = tknrNew lexerFullAlphabet 0 Nothing [2] commentTransitions "COMMENT" False
 
 main:: IO ()
 main = do
