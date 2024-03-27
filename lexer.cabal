@@ -58,7 +58,7 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:  Lexer
+    exposed-modules:  Lexer, Tokenizer
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -85,7 +85,7 @@ executable lexer
     main-is:          Main.hs
 
     -- Modules included in this executable, other than Main.
-    other-modules: Lexer
+    other-modules: Lexer, Tokenizer
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -110,7 +110,7 @@ test-suite lexer-test
     default-language: GHC2021
 
     -- Modules included in this executable, other than Main.
-    -- other-modules:
+    -- other-modules: Lexer, Tokenizer
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -122,9 +122,11 @@ test-suite lexer-test
     hs-source-dirs:   test
 
     -- The entrypoint to the test suite.
-    main-is:          Tests.hs
+    main-is:          Main.hs
 
     -- Test dependencies.
     build-depends:
         base ^>=4.17.2.1,
-        lexer
+        lexer,
+        containers,
+        HUnit
