@@ -84,6 +84,15 @@ instance Show Token where
             ++ show (tokenEnd token)
             ++ ")"
 
+data TokenizeError = TokenizeError
+    { tknrErrMsg :: String
+    , tknrErrPos :: Int
+    }
+
+instance Show TokenizeError where
+    show err =
+        tknrErrMsg err ++ " at " ++ show (tknrErrPos err)
+
 -- | Create a new tokenizer with a DFA, String ID and whether to ignore its tokens when tokenizing.
 tknrNew :: Set.Set Char -> Int -> Maybe Int -> [Int] -> [((Int, Char), Int)] -> String -> Bool -> Tokenizer
 tknrNew alphabet startState deadState acceptStates transitionList tkid ignore =
@@ -240,16 +249,21 @@ _debugTokenize _ currentTokenizers str tokens start idx =
         ++ show idx
         ++ "\n"
 
-_tokenizeInternal :: [Tokenizer] -> [Tokenizer] -> String -> [Token] -> Int -> Int -> [Token]
+_tokenizeInternal :: [Tokenizer] -> [Tokenizer] -> String -> [Token] -> Int -> Int -> Either TokenizeError [Token]
 _tokenizeInternal a b c d e f | trace (_debugTokenize a b c d e f) False = undefined
 -- base case: The string is fully consumed so we know everything was tokenized
-_tokenizeInternal _ _ "" tokens _ _ = tokens
+_tokenizeInternal _ _ "" tokens _ _ = Right tokens
 -- Recursive case: we update the tokenizers each level, checking for matches and consuming
 -- substrings if a token is detected
 _tokenizeInternal tokenizers currentTokenizers inputString tokens currentStart currentIndex
     -- NO tokenizers are active: character is not valid
     | null activeTokenizers =
-        error $ "Unexpected char '" ++ [head inputString] ++ "' at position " ++ show currentStart
+        Left
+            TokenizeError
+                { tknrErrMsg = "Unexpected character " ++ [head inputString]
+                , tknrErrPos = currentStart
+                }
+    -- error $ "Unexpected char '" ++ [head inputString] ++ "' at position " ++ show currentStart
     -- We have at least one match (we choose the first)
     -- 'matches' contains all matching tokenizers, even if they aren't finished yet
     -- If the most important one isn't finished yet, we can discard the rest
@@ -304,5 +318,5 @@ _tokenizeInternal tokenizers currentTokenizers inputString tokens currentStart c
     matches = filter tknrValidState activeTokenizers
     matchedTokenizer = head matches
 
-tokenize :: [Tokenizer] -> String -> [Token]
+tokenize :: [Tokenizer] -> String -> Either TokenizeError [Token]
 tokenize tokenizers inputString = _tokenizeInternal tokenizers [] inputString [] 0 0
