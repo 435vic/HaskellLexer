@@ -15,7 +15,7 @@ https://chat.openai.com/share/974e55de-ff5f-4de2-aae7-4b664a34edca
 -}
 module Tokenizer (module Tokenizer) where
 
-import Data.List (nub)
+import Data.List (nub, partition)
 import Data.Map.Strict qualified as Map
 import Data.Maybe
 import Data.Set qualified as Set
@@ -159,7 +159,7 @@ tknrNew alphabet startState deadState acceptStates transitionList tkid ignore =
     -- where the state exists as a source state
     invalidTransitions = not $ null invalidStateTransitions
     fromStates = nub [q | ((q, _), _) <- transitionList]
-    invalidStateTransitions = filter (\((_, _), qt) -> qt `notElem` fromStates) transitionList
+    invalidStateTransitions = nub $ filter (\((_, _), qt) -> qt `notElem` fromStates) transitionList
     -- Valid states: for each state there must be one and only one transition for ALL elements
     -- of the alphabet. Before checking this we expand the transition list.
     invalidStates = not $ null invalidStatesList
@@ -195,7 +195,7 @@ tknrStep tokenizer@Tokenizer{tknrState = maybeState, tknrDFA = dfa, tknrDeadStat
 
 -- | This utility function creates a tokenizer that accepts a single character.
 tknrSingleChar :: Char -> String -> Bool -> Tokenizer
-tknrSingleChar c = tknrNew (Set.singleton c) 0 Nothing [2] transitions
+tknrSingleChar c = tknrNew (Set.singleton c) 0 Nothing [1] transitions
   where
     transitions = [((0, c), 1), ((1, c), 2), ((2, c), 2)]
 
@@ -264,9 +264,10 @@ _tokenizeInternal tokenizers currentTokenizers inputString tokens currentStart c
                 , tknrErrPos = currentStart
                 }
     -- error $ "Unexpected char '" ++ [head inputString] ++ "' at position " ++ show currentStart
-    -- We have at least one match (we choose the first)
-    -- 'matches' contains all matching tokenizers, even if they aren't finished yet
-    -- If the most important one isn't finished yet, we can discard the rest
+    -- 'matches' contains all tokenizers that are in valid states
+    -- The ones have finished matching (i.e the current character would be invalid) are sorted
+    -- last in the list. If the top of the list has one that's finished it means that no longer
+    -- tokens can be created. In this case we take the most important one of those.
     | not (null matches) && tknrFinishedMatching matchedTokenizer =
         let
             -- After a substring matches we can discard all the states of the tokenizers,
@@ -299,23 +300,24 @@ _tokenizeInternal tokenizers currentTokenizers inputString tokens currentStart c
     activeTokenizers
         | currentIndex == 0 = tokenizers
         | otherwise = filter (isJust . tknrState) currentTokenizers
+
     -- This function determines if the current character is part of the specified
     -- tokenizer's alphabet. Of course, past the end of the string anything would be invalid.
-    tknrValidNow tknr
+    tknrStillMatching tknr
         | endOfString = False
-        | otherwise =
-            let
-                nextState = tknrState $ tknr `tknrStep` currentChar
-                dfa = tknrDFA tknr
-             in
-                maybe False (`Set.member` dfaAcceptStates dfa) nextState
+        | otherwise = isJust (tknrState $ tknr `tknrStep` currentChar)
 
     -- A tokenizer has a complete match if it reaches an *accepted* state at the end of a
     -- \*valid* string. Which means the valid string ends as soon as an invalid character
     -- appears in the input string.
-    tknrFinishedMatching tknr = not (tknrValidNow tknr)
+    tknrFinishedMatching tknr = tknrValidState tknr && not (tknrStillMatching tknr)
 
-    matches = filter tknrValidState activeTokenizers
+    -- The tokenizers that are still matching take priority in this case
+    _matches =
+        let
+            (left, right) = partition tknrStillMatching activeTokenizers
+        in left ++ filter tknrFinishedMatching right
+    matches = trace (show _matches) _matches
     matchedTokenizer = head matches
 
 tokenize :: [Tokenizer] -> String -> Either TokenizeError [Token]

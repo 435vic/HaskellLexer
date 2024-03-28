@@ -6,7 +6,12 @@ import Test.HUnit
 import Tokenizer
 
 tokenizerTestCases :: [(Tokenizer, [(String, Bool)])]
-tokenizerTestCases = [(integerTokenizer, integerTestCases), (commentTokenizer, commentTestCases)]
+tokenizerTestCases =
+    [ (integerTokenizer, integerTestCases)
+    , (commentTokenizer, commentTestCases)
+    , (variableTokenizer, variableTestCases)
+    , (realTokenizer, realTestCases)
+    ]
   where
     integerTestCases =
         [ ("+245", True)
@@ -26,6 +31,34 @@ tokenizerTestCases = [(integerTokenizer, integerTestCases), (commentTokenizer, c
         , ("/ ajsfjgjja", False)
         , ("// comment", True)
         , ("// // // //", True)
+        ]
+    variableTestCases =
+        [ ("_var", False)
+        , ("Var", True)
+        , ("var", True)
+        , ("u78a7", True)
+        , ("7u8a7", False)
+        , (" ", False)
+        , ("VARIABLE", True)
+        ]
+    realTestCases =
+        [ ("+245.0", True)
+        , ("681.0", True)
+        , ("4.0", True)
+        , ("12-2.0", False)
+        , ("abc", False)
+        , ("123.45", True)
+        , ("0xFF", False)
+        , ("0.0", True)
+        , (".24", True)
+        , ("24.", True)
+        , ("24.0e-2", True)
+        , ("24.0e+2", True)
+        , ("24.0e2", True)
+        , ("24.0e", False)
+        , ("-24.0e+", False)
+        , ("-2414", False)
+        , ("9", False)
         ]
 
 tknrDFATests :: (Tokenizer, [(String, Bool)]) -> Test
