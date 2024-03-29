@@ -1,0 +1,9 @@
+a = 32.4 *(-8.6 - b)/       6.1E-8
+b=7
+d = a ^ b // Esto es un comentario
+_myvar2 = 24-21.24^24.4e-4
+sdg.
+-241. // test
+invalid.
+hello_world 234 - 1?
+.2451e10 * 351
