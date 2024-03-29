@@ -250,7 +250,7 @@ _debugTokenize _ currentTokenizers str tokens start idx =
         ++ "\n"
 
 _tokenizeInternal :: [Tokenizer] -> [Tokenizer] -> String -> [Token] -> Int -> Int -> Either TokenizeError [Token]
-_tokenizeInternal a b c d e f | trace (_debugTokenize a b c d e f) False = undefined
+-- _tokenizeInternal a b c d e f | trace (_debugTokenize a b c d e f) False = undefined
 -- base case: The string is fully consumed so we know everything was tokenized
 _tokenizeInternal _ _ "" tokens _ _ = Right tokens
 -- Recursive case: we update the tokenizers each level, checking for matches and consuming
@@ -299,6 +299,7 @@ _tokenizeInternal tokenizers currentTokenizers inputString tokens currentStart c
     -- Only tokenizers that activate on the first character of the substring will be considered.
     activeTokenizers
         | currentIndex == 0 = tokenizers
+        | endOfString = filter tknrValidState currentTokenizers
         | otherwise = filter (isJust . tknrState) currentTokenizers
 
     -- This function determines if the current character is part of the specified
@@ -313,11 +314,11 @@ _tokenizeInternal tokenizers currentTokenizers inputString tokens currentStart c
     tknrFinishedMatching tknr = tknrValidState tknr && not (tknrStillMatching tknr)
 
     -- The tokenizers that are still matching take priority in this case
-    _matches =
+    matches =
         let
             (left, right) = partition tknrStillMatching activeTokenizers
         in left ++ filter tknrFinishedMatching right
-    matches = trace (show _matches) _matches
+    -- matches = trace (show _matches) _matches
     matchedTokenizer = head matches
 
 tokenize :: [Tokenizer] -> String -> Either TokenizeError [Token]
