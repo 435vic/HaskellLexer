@@ -15,7 +15,7 @@ git clone https://github.com/435vic/HaskellLexer && cd HaskellLexer
 
 Then, download and install the required Haskell dependencies:
 ```
-cabal update && cabal install
+cabal update
 ```
 
 Finally, you can build and run the project with some example strings:
