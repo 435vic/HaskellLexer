@@ -68,7 +68,7 @@ library
 
     -- Other library packages from which modules are imported.
     build-depends:
-        base ^>=4.17.2.1,
+        base ^>=4.18.2.1,
         containers
 
     -- Directories containing source files.
@@ -94,7 +94,7 @@ executable lexer
 
     -- Other library packages from which modules are imported.
     build-depends:
-        base ^>=4.17.2.1,
+        base ^>=4.18.2.1,
         containers,
         lexer
 
@@ -128,7 +128,7 @@ test-suite lexer-test
 
     -- Test dependencies.
     build-depends:
-        base ^>=4.17.2.1,
+        base ^>=4.18.2.1,
         lexer,
         containers,
         HUnit
