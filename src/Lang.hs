@@ -1,7 +1,8 @@
-module Lexer (module Lexer) where
+module Lang (module Lang) where
 
 import Data.Set qualified as Set
 import Tokenizer
+import Parser
 
 lexerLowercase :: Set.Set Char
 lexerLowercase = Set.fromList ['a' .. 'z']
@@ -75,22 +76,22 @@ minusTokenizer :: Tokenizer
 minusTokenizer = tknrSingleChar '-' "MINUS" False
 
 divTokenizer :: Tokenizer
-divTokenizer = tknrSingleChar '/' "DIVISION" False
+divTokenizer = tknrSingleChar '/' "DIV" False
 
 multTokenizer :: Tokenizer
-multTokenizer = tknrSingleChar '*' "MULTIPLICATION" False
+multTokenizer = tknrSingleChar '*' "MULT" False
 
 expTokenizer :: Tokenizer
-expTokenizer = tknrSingleChar '^' "EXPONENTIATION" False
+expTokenizer = tknrSingleChar '^' "EXP" False
 
 assignTokenizer :: Tokenizer
-assignTokenizer = tknrSingleChar '=' "ASSIGNMENT" False
+assignTokenizer = tknrSingleChar '=' "ASSIGN" False
 
 parenOpenTokenizer :: Tokenizer
-parenOpenTokenizer = tknrSingleChar '(' "PAREN_OPEN" False
+parenOpenTokenizer = tknrSingleChar '(' "LPAREN" False
 
 parenCloseTokenizer :: Tokenizer
-parenCloseTokenizer = tknrSingleChar ')' "PAREN_CLOSE" False
+parenCloseTokenizer = tknrSingleChar ')' "RPAREN" False
 
 whitespaceTokenizer :: Tokenizer
 whitespaceTokenizer = tknrNew lexerWhitespace 0 Nothing [1] whitespaceTransitions "WHITESPACE" True
@@ -119,8 +120,8 @@ realTokenizer =
      in
         tknrNew realAlphabet 0 Nothing [4, 5, 8] realTransitions "REAL" False
 
-arithmeticTokenizers :: [Tokenizer]
-arithmeticTokenizers =
+tokenizers :: [Tokenizer]
+tokenizers =
     [ commentTokenizer
     , plusTokenizer
     , minusTokenizer
@@ -135,3 +136,22 @@ arithmeticTokenizers =
     , integerTokenizer
     , whitespaceTokenizer
     ]
+
+grammar :: Grammar
+grammar = Grammar
+    { grammarStart = "expr"
+    , grammarRules =
+        [ ("expr", [NT "term", NT "expr'"])
+        , ("expr'", [T "PLUS", NT "term", NT "expr'"])
+        , ("expr'", [T "MINUS", NT "term", NT "expr'"])
+        , ("expr'", [])
+        , ("term", [NT "fac", NT "term'"])
+        , ("term'", [T "MULT", NT "fac", NT "term'"])
+        , ("term'", [T "DIV", NT "fac", NT "term'"])
+        , ("term'", [])
+        , ("fac", [T "LPAREN", NT "expr", T "RPAREN"])
+        , ("fac", [T "VARIABLE"])
+        , ("fac", [T "INTEGER"])
+        , ("fac", [T "REAL"])
+        ]
+    }

@@ -1,4 +1,4 @@
-import Lexer
+import Lang qualified
 import Tokenizer
 
 import System.Environment (getArgs)
@@ -19,7 +19,7 @@ parseLines l = mapM_ processLine (zip [0..] l)
         processLine :: (Int, String) -> IO ()
         processLine (i, line) = do
                 printf msg i line
-                displayResults line (tokenize arithmeticTokenizers line)
+                displayResults line (tokenize Lang.tokenizers line)
         msg = "--------------- Line %d: \"%s\" ---------------\n"
 
 displayResults :: String -> Either TokenizeError [Token] -> IO ()

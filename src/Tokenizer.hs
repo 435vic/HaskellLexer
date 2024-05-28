@@ -249,13 +249,16 @@ _debugTokenize _ currentTokenizers str tokens start idx =
         ++ show idx
         ++ "\n"
 
-_tokenizeInternal :: [Tokenizer] -> [Tokenizer] -> String -> [Token] -> Int -> Int -> Either TokenizeError [Token]
+tokenize :: [Tokenizer] -> String -> Either TokenizeError [Token]
+tokenize tokenizers inputString = tokenize' tokenizers [] inputString [] 0 0
+
+tokenize' :: [Tokenizer] -> [Tokenizer] -> String -> [Token] -> Int -> Int -> Either TokenizeError [Token]
 -- _tokenizeInternal a b c d e f | trace (_debugTokenize a b c d e f) False = undefined
 -- base case: The string is fully consumed so we know everything was tokenized
-_tokenizeInternal _ _ "" tokens _ _ = Right tokens
+tokenize' _ _ "" tokens _ _ = Right tokens
 -- Recursive case: we update the tokenizers each level, checking for matches and consuming
 -- substrings if a token is detected
-_tokenizeInternal tokenizers currentTokenizers inputString tokens currentStart currentIndex
+tokenize' tokenizers currentTokenizers inputString tokens currentStart currentIndex
     -- NO tokenizers are active: character is not valid
     | null activeTokenizers =
         Left
@@ -283,11 +286,11 @@ _tokenizeInternal tokenizers currentTokenizers inputString tokens currentStart c
             -- necessarily displayed or considered (e.g whitespace)
             newTokens = if tknrIgnore matchedTokenizer then tokens else newToken : tokens
          in
-            _tokenizeInternal newTokenizers [] suffix newTokens (currentStart + currentIndex) 0
+            tokenize' newTokenizers [] suffix newTokens (currentStart + currentIndex) 0
     -- No tokenizers have finished a match
     -- We advance the currentIndex by one, calculating the next state for all tokenizers
     -- We should never reach this if endOfString is True
-    | otherwise = _tokenizeInternal tokenizers nextTokenizers inputString tokens currentStart (currentIndex + 1)
+    | otherwise = tokenize' tokenizers nextTokenizers inputString tokens currentStart (currentIndex + 1)
   where
     endOfString = currentIndex >= length inputString
     currentChar = inputString !! currentIndex
@@ -320,6 +323,3 @@ _tokenizeInternal tokenizers currentTokenizers inputString tokens currentStart c
         in left ++ filter tknrFinishedMatching right
     -- matches = trace (show _matches) _matches
     matchedTokenizer = head matches
-
-tokenize :: [Tokenizer] -> String -> Either TokenizeError [Token]
-tokenize tokenizers inputString = _tokenizeInternal tokenizers [] inputString [] 0 0
