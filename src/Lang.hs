@@ -1,8 +1,19 @@
+{- |
+Module      :  Lang
+Description :  Language definitions for arithmetic programming language
+Copyright   :  (c) Victor Quintana A01643020
+License     :  MIT
+
+Maintainer  :  A01643020@tec.mx
+
+Language definitions for the arithmetic programming language described in
+Activity 3.4 (TC2037.602)
+-}
 module Lang (module Lang) where
 
 import Data.Set qualified as Set
-import Tokenizer
 import Parser
+import Tokenizer
 
 lexerLowercase :: Set.Set Char
 lexerLowercase = Set.fromList ['a' .. 'z']
@@ -101,24 +112,18 @@ commentTokenizer = tknrNew lexerFullAlphabet 0 Nothing [2] commentTransitions "C
 
 integerTokenizer :: Tokenizer
 integerTokenizer =
-    let
-        integerAlphabet = lexerNumbers `Set.union` Set.fromList ['+', '-']
-     in
-        tknrNew integerAlphabet 0 Nothing [2] integerTransitions "INTEGER" False
+    let integerAlphabet = lexerNumbers `Set.union` Set.fromList ['+', '-']
+     in tknrNew integerAlphabet 0 Nothing [2] integerTransitions "INTEGER" False
 
 variableTokenizer :: Tokenizer
 variableTokenizer =
-    let
-        variableAlphabet = lexerAlphanumeric `Set.union` Set.singleton '_'
-     in
-        tknrNew variableAlphabet 0 Nothing [1] variableTransitions "VARIABLE" False
+    let variableAlphabet = lexerAlphanumeric `Set.union` Set.singleton '_'
+     in tknrNew variableAlphabet 0 Nothing [1] variableTransitions "VARIABLE" False
 
 realTokenizer :: Tokenizer
 realTokenizer =
-    let
-        realAlphabet = lexerNumbers `Set.union` Set.fromList ['.', 'e', 'E', '+', '-']
-     in
-        tknrNew realAlphabet 0 Nothing [4, 5, 8] realTransitions "REAL" False
+    let realAlphabet = lexerNumbers `Set.union` Set.fromList ['.', 'e', 'E', '+', '-']
+     in tknrNew realAlphabet 0 Nothing [4, 5, 8] realTransitions "REAL" False
 
 tokenizers :: [Tokenizer]
 tokenizers =
@@ -138,20 +143,21 @@ tokenizers =
     ]
 
 grammar :: Grammar
-grammar = Grammar
-    { grammarStart = "expr"
-    , grammarRules =
-        [ ("expr", [NT "term", NT "expr'"])
-        , ("expr'", [T "PLUS", NT "term", NT "expr'"])
-        , ("expr'", [T "MINUS", NT "term", NT "expr'"])
-        , ("expr'", [])
-        , ("term", [NT "fac", NT "term'"])
-        , ("term'", [T "MULT", NT "fac", NT "term'"])
-        , ("term'", [T "DIV", NT "fac", NT "term'"])
-        , ("term'", [])
-        , ("fac", [T "LPAREN", NT "expr", T "RPAREN"])
-        , ("fac", [T "VARIABLE"])
-        , ("fac", [T "INTEGER"])
-        , ("fac", [T "REAL"])
-        ]
-    }
+grammar =
+    Grammar
+        { grammarStart = "expr"
+        , grammarRules =
+            [ ("expr", [NT "term", NT "expr'"])
+            , ("expr'", [T "PLUS", NT "term", NT "expr'"])
+            , ("expr'", [T "MINUS", NT "term", NT "expr'"])
+            , ("expr'", [])
+            , ("term", [NT "fac", NT "term'"])
+            , ("term'", [T "MULT", NT "fac", NT "term'"])
+            , ("term'", [T "DIV", NT "fac", NT "term'"])
+            , ("term'", [])
+            , ("fac", [T "LPAREN", NT "expr", T "RPAREN"])
+            , ("fac", [T "VARIABLE"])
+            , ("fac", [T "INTEGER"])
+            , ("fac", [T "REAL"])
+            ]
+        }

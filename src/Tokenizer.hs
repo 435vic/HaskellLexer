@@ -19,7 +19,8 @@ import Data.List (nub, partition)
 import Data.Map.Strict qualified as Map
 import Data.Maybe
 import Data.Set qualified as Set
-import Debug.Trace (trace)
+
+-- import Debug.Trace (trace)
 
 -- The formal definition of a DFA (source: Wikipedia) is a 5-tuple (Q, Σ, δ, q0, F) consisting of:
 -- 1. A finite set of states Q, stored as an array of generic type q
@@ -172,11 +173,9 @@ tknrValidChar tokenizer char = char `Set.member` dfaAlphabet (tknrDFA tokenizer)
 -- | Determine if the tokenizer is currently in an accepted state.
 tknrValidState :: Tokenizer -> Bool
 tknrValidState tokenizer =
-    let
-        acceptStates = (dfaAcceptStates . tknrDFA) tokenizer
+    let acceptStates = (dfaAcceptStates . tknrDFA) tokenizer
         state = tknrState tokenizer
-     in
-        fromMaybe (-1) state `Set.member` acceptStates
+     in fromMaybe (-1) state `Set.member` acceptStates
 
 -- capture syntax and pattern matching! haskell is kinda cool, reminds me of rust
 -- found this out in https://chat.openai.com/share/f115190a-2da0-475e-baf0-7cc44887bd6c
@@ -318,8 +317,7 @@ tokenize' tokenizers currentTokenizers inputString tokens currentStart currentIn
 
     -- The tokenizers that are still matching take priority in this case
     matches =
-        let
-            (left, right) = partition tknrStillMatching activeTokenizers
-        in left ++ filter tknrFinishedMatching right
+        let (left, right) = partition tknrStillMatching activeTokenizers
+         in left ++ filter tknrFinishedMatching right
     -- matches = trace (show _matches) _matches
     matchedTokenizer = head matches
