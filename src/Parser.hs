@@ -66,7 +66,7 @@ data ParseError = ParseError
 instance Show ParseError where
     show ParseError{parseErrorRemainingTokens = []} = "Syntax error at line 0 col 0"
     show ParseError{parseErrorRemainingTokens = (tkn@Token{tokenLine = Just ln, tokenStart = col} : _)} =
-        "Syntax error at line " ++ show ln ++ " col " ++ show col ++ show tkn
+        "Syntax error at line " ++ show ln ++ " col " ++ show col ++ " (" ++ show tkn ++ ")"
     show _ = "Syntax error."
 
 parse :: Grammar -> [Token] -> Either ParseError AST

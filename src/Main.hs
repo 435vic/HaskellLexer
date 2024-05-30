@@ -18,7 +18,6 @@ substr s start end = take (end - start) (drop start s)
 parseLines :: [String] -> IO ()
 parseLines l = do
     tokens <- populateTokens l <$> tokenizeLines l 0
-    print tokens
     case parse Lang.grammar (concat tokens) of
         Left err -> print err
         Right tree -> print tree

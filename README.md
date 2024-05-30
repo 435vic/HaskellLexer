@@ -18,11 +18,8 @@ Then, download and install the required Haskell dependencies:
 cabal update
 ```
 
-Finally, you can build and run the project with some example strings:
+Finally, you can build and run the project, specifying a file to parse into AST:
+
 ```
-cabal run lexer -- "myVar = -124.3e14 * +124"
-```
-Or specify a file. An example file is available in `test/example_input.txt`:
-```
-cabal run lexer -- -f test/example_input.txt
+cabal run lexer -- -f test/program1.txt
 ```
