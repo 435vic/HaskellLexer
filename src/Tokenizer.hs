@@ -28,6 +28,7 @@ module Tokenizer (
     tknrErrMsg,
     tknrID,
     tknrDFA,
+    tknrSpan,
     Token (Token),
     TokenizeError,
     Tokenizer (Tokenizer),
@@ -67,6 +68,15 @@ dfaAccept dfa = recurse (Just $ dfaStartState dfa)
     recurse (Just state) [] = state `elem` dfaAcceptStates dfa
     recurse (Just state) (x : xs) = recurse (dfaTransition dfa state x) xs
     recurse Nothing _ = False
+
+-- | Given a DFA and a list of chars, this function returns the longest prefix of the list that is accepted by the DFA.
+dfaSpan :: DFA -> [Char] -> ([Char], [Char])
+dfaSpan dfa = recurse (Just $ dfaStartState dfa) []
+  where
+    recurse :: Maybe Int -> [Char] -> [Char] -> ([Char], [Char])
+    recurse (Just _) acc [] = (reverse acc, [])
+    recurse (Just state) acc (x : xs) = recurse (dfaTransition dfa state x) (x : acc) xs
+    recurse Nothing acc xs = (reverse acc, xs)
 
 {- | Tokenizer is an individual tokenizer. It detects a single type of token.
 It's built from a DFA object and a string identifier. The `tknrIgnore` option
@@ -119,6 +129,9 @@ data TokenizeError = TokenizeError
 instance Show TokenizeError where
     show err =
         tknrErrMsg err ++ " at " ++ show (tknrErrPos err)
+
+tknrSpan :: Tokenizer -> String -> (String, String)
+tknrSpan tokenizer = dfaSpan (tknrDFA tokenizer)
 
 -- | Create a new tokenizer with a DFA, String ID and whether to ignore its tokens when tokenizing.
 tknrNew :: Set.Set Char -> Int -> Maybe Int -> [Int] -> [((Int, Char), Int)] -> String -> Bool -> Tokenizer
@@ -347,5 +360,5 @@ tokenize' tokenizers currentTokenizers inputString tokens currentStart currentIn
     matches =
         let (left, right) = partition tknrStillMatching activeTokenizers
          in left ++ filter tknrFinishedMatching right
-    -- _matches = trace (show matches) matches
+    _matches = trace (show matches) matches
     matchedTokenizer = head matches
