@@ -13,14 +13,32 @@ and as written by the LLMs consulted.
 Most of my interactions with ChatGPT can be found in the following conversation link:
 https://chat.openai.com/share/974e55de-ff5f-4de2-aae7-4b664a34edca
 -}
-module Tokenizer (module Tokenizer) where
+module Tokenizer (
+    dfaAccept,
+    tknrNew,
+    tokenize,
+    tokenID,
+    tokenStart,
+    tokenEnd,
+    tokenContent,
+    tokenLine,
+    displayToken,
+    tknrSingleChar,
+    tknrValidChar,
+    tknrErrMsg,
+    tknrID,
+    tknrDFA,
+    Token (Token),
+    TokenizeError,
+    Tokenizer (Tokenizer),
+) where
 
 import Data.List (nub, partition)
 import Data.Map.Strict qualified as Map
 import Data.Maybe
 import Data.Set qualified as Set
 
--- import Debug.Trace (trace)
+import Debug.Trace (trace)
 
 -- The formal definition of a DFA (source: Wikipedia) is a 5-tuple (Q, Σ, δ, q0, F) consisting of:
 -- 1. A finite set of states Q, stored as an array of generic type q
@@ -73,7 +91,15 @@ data Token = Token
     { tokenID :: String
     , tokenStart :: Int
     , tokenEnd :: Int
+    , tokenContent :: Maybe String
+    , tokenLine :: Maybe Int
     }
+
+displayToken :: Token -> String
+displayToken Token{tokenID = tid, tokenContent = Just content}
+    | length content == 1 = content
+    | otherwise = tid ++ " (" ++ content ++ ")"
+displayToken Token{tokenID = tid} = tid
 
 instance Show Token where
     show token =
@@ -252,7 +278,7 @@ tokenize :: [Tokenizer] -> String -> Either TokenizeError [Token]
 tokenize tokenizers inputString = tokenize' tokenizers [] inputString [] 0 0
 
 tokenize' :: [Tokenizer] -> [Tokenizer] -> String -> [Token] -> Int -> Int -> Either TokenizeError [Token]
--- _tokenizeInternal a b c d e f | trace (_debugTokenize a b c d e f) False = undefined
+-- tokenize' a b c d e f | trace (_debugTokenize a b c d e f) False = undefined
 -- base case: The string is fully consumed so we know everything was tokenized
 tokenize' _ _ "" tokens _ _ = Right tokens
 -- Recursive case: we update the tokenizers each level, checking for matches and consuming
@@ -280,6 +306,8 @@ tokenize' tokenizers currentTokenizers inputString tokens currentStart currentIn
                     { tokenID = tknrID matchedTokenizer
                     , tokenStart = currentStart
                     , tokenEnd = currentStart + currentIndex
+                    , tokenContent = Nothing
+                    , tokenLine = Nothing
                     }
             -- tokenizers have an ignore property because some tokens should be parsed but not
             -- necessarily displayed or considered (e.g whitespace)
@@ -319,5 +347,5 @@ tokenize' tokenizers currentTokenizers inputString tokens currentStart currentIn
     matches =
         let (left, right) = partition tknrStillMatching activeTokenizers
          in left ++ filter tknrFinishedMatching right
-    -- matches = trace (show _matches) _matches
+    -- _matches = trace (show matches) matches
     matchedTokenizer = head matches

@@ -8,7 +8,15 @@ Maintainer  :  A01643020@tec.mx
 
 An implementation of a recursive descent parser.
 -}
-module Parser (module Parser) where
+module Parser (
+    Grammar (Grammar),
+    Symbol (T, NT),
+    AST,
+    grammarStart,
+    grammarRules,
+    productionsFor,
+    parse,
+) where
 
 import Tokenizer
 
@@ -39,16 +47,43 @@ drawTree = unlines . draw
   where
     draw :: AST -> [String]
     draw (Node nt trees) = nt : drawChildren trees
-    draw (Leaf t _) = [t]
+    draw (Leaf _ token) = [displayToken token]
 
     drawChildren :: [AST] -> [String]
     drawChildren [] = []
     drawChildren [t] =
-        "|" : shift "┖─ " "   " (draw t)
+        "┃" : shift "┖─ " "   " (draw t)
     drawChildren (t : ts) =
-        "|" : shift "┠─ " "┃  " (draw t) ++ drawChildren ts
+        "┃" : shift "┠─ " "┃  " (draw t) ++ drawChildren ts
 
     shift first other = zipWith (++) (first : repeat other)
+
+data ParseError = ParseError
+    { parseErrorMsg :: String
+    , parseErrorRemainingTokens :: [Token]
+    }
+
+instance Show ParseError where
+    show ParseError { parseErrorRemainingTokens = [] } = "Syntax error at line 0 col 0"
+    show ParseError { parseErrorRemainingTokens = (Token { tokenLine = Just ln, tokenStart = col }:_) }
+            = "Syntax error at line " ++ show ln ++ " col " ++ show col
+    show _ = "Syntax error."
+
+parse :: Grammar -> [Token] -> Either ParseError AST
+parse grammar tokens = case parse' grammar (grammarStart grammar) tokens of
+    Nothing ->
+        Left
+            ParseError
+                { parseErrorMsg = "A parse tree could not be built from the provided tokens."
+                , parseErrorRemainingTokens = tokens
+                }
+    Just (tree, []) -> Right tree
+    Just (_, tkns) ->
+        Left
+            ParseError
+                { parseErrorMsg = "There was an error while parsing the tokens."
+                , parseErrorRemainingTokens = tkns
+                }
 
 parse' :: Grammar -> NonTerminal -> [Token] -> Maybe (AST, [Token])
 parse' grammar nt tokens = useRules $ productionsFor grammar nt
