@@ -19,6 +19,7 @@ module Parser (
 ) where
 
 import Tokenizer
+import Debug.Trace
 
 type Terminal = String
 
@@ -51,63 +52,57 @@ drawTree = unlines . draw
 
     drawChildren :: [AST] -> [String]
     drawChildren [] = []
-    drawChildren [t] =
-        "│" : shift "└─ " "   " (draw t)
-    drawChildren (t : ts) =
-        "│" : shift "├─ " "│  " (draw t) ++ drawChildren ts
+    drawChildren [t] = shift "└─ " "   " (draw t)
+    drawChildren (t : ts) = shift "├─ " "│  " (draw t) ++ drawChildren ts
 
     shift first other = zipWith (++) (first : repeat other)
 
-data ParseError = ParseError
-    { parseErrorMsg :: String
-    , parseErrorRemainingTokens :: [Token]
-    }
+data ParseErrorType 
+    = UnexpectedToken Token 
+    | UnexpectedEndOfInput
+    deriving Show
 
-instance Show ParseError where
-    show ParseError{parseErrorRemainingTokens = []} = "Syntax error at line 0 col 0"
-    show ParseError{parseErrorRemainingTokens = (tkn@Token{tokenLine = Just ln, tokenStart = col} : _)} =
-        "Syntax error at line " ++ show ln ++ " col " ++ show col ++ " (" ++ show tkn ++ ")"
-    show _ = "Syntax error."
+data ParseError = ParseError
+    { parseErrType :: ParseErrorType
+    , parseErrStack :: [Symbol]
+    } deriving Show
+
+parseErrDepth :: ParseError -> Int
+parseErrDepth = length . parseErrStack
 
 parse :: Grammar -> [Token] -> Either ParseError AST
-parse grammar tokens = case parse' grammar (grammarStart grammar) tokens of
-    Nothing ->
-        Left
-            ParseError
-                { parseErrorMsg = "A parse tree could not be built from the provided tokens."
-                , parseErrorRemainingTokens = tokens
-                }
-    Just (tree, []) -> Right tree
-    Just (_, tkns) ->
-        Left
-            ParseError
-                { parseErrorMsg = "There was an error while parsing the tokens."
-                , parseErrorRemainingTokens = tkns
-                }
+parse grammar tokens = case parse' grammar (grammarStart grammar) tokens [NT (grammarStart grammar)] Nothing of
+    Right (ast, []) -> Right ast
+    Right (_, _) -> Left $ ParseError UnexpectedEndOfInput []
+    Left err -> Left err
 
-parse' :: Grammar -> NonTerminal -> [Token] -> Maybe (AST, [Token])
-parse' grammar nt tokens = useRules $ productionsFor grammar nt
+parse' :: Grammar -> NonTerminal -> [Token] -> [Symbol] -> Maybe ParseError -> Either ParseError (AST, [Token])
+parse' _ nt _ stack | trace ("\nparse' " ++ nt ++ " " ++ show stack) False = undefined
+parse' grammar nt tokens st = useRules (productionsFor grammar nt) st
   where
-    useRules :: [ProductionRule] -> Maybe (AST, [Token])
-    useRules [] = Nothing
-    useRules ((_, symbols) : rest) =
-        case parseRule symbols tokens of
-            Just (subtrees, remainingTokens) ->
+    useRules :: [ProductionRule] -> [Symbol] -> Maybe ParseError -> Either ParseError (AST, [Token])
+    useRules [] _ (Just lastErr) = Left lastErr
+    useRules [] stack Nothing = Left $ ParseError (UnexpectedToken (head tokens)) stack
+    useRules ((_, symbols) : rest) stack _ =
+        case parseRule symbols tokens stack of
+            Right (subtrees, remainingTokens) ->
                 let nonEmpty = filter (not . isEmpty) subtrees
-                 in Just (Node nt nonEmpty, remainingTokens)
-            Nothing -> useRules rest
+                 in Right (Node nt nonEmpty, remainingTokens)
+            Left err -> useRules rest stack (Just err)
 
-    parseRule :: [Symbol] -> [Token] -> Maybe ([AST], [Token])
-    parseRule [] tkns = Just ([], tkns)
-    parseRule (T terminal : rest) (token : tkns)
+    parseRule :: [Symbol] -> [Token] -> [Symbol] -> Either ParseError ([AST], [Token])
+    parseRule symbols tokens stack | trace ("parseRule " ++ show tokens ++ " " ++ show symbols ++ " " ++ show stack) False = undefined
+    parseRule [] tkns _ = Right ([], tkns)
+    parseRule (T terminal : rest) (token : tkns) stack
         | terminal == tokenID token = do
-            (subtrees, remainingTokens) <- parseRule rest tkns
-            return (Leaf terminal token : subtrees, remainingTokens)
-    parseRule (NT nonTerminal : rest) tkns = do
-        (subtree, remainingTokens) <- parse' grammar nonTerminal tkns
-        (subtrees, finalTokens) <- parseRule rest remainingTokens
+            (subtrees, remainingTokens) <- parseRule rest tkns stack
+            Right (Leaf terminal token : subtrees, remainingTokens)
+        | otherwise = Left $ ParseError (UnexpectedToken token) (trace "unexpected token" stack)
+    parseRule (NT nonTerminal : rest) tkns stack = do
+        (subtree, remainingTokens) <- parse' grammar nonTerminal tkns (NT nonTerminal : stack) Nothing
+        (subtrees, finalTokens) <- parseRule rest remainingTokens (NT nonTerminal : stack)
         return (subtree : subtrees, finalTokens)
-    parseRule _ _ = Nothing
+    parseRule _ [] stack = Left $ ParseError UnexpectedEndOfInput stack
 
     isEmpty :: AST -> Bool
     isEmpty (Node _ []) = True

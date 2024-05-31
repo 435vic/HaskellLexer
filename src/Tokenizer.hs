@@ -112,14 +112,15 @@ displayToken Token{tokenID = tid, tokenContent = Just content}
 displayToken Token{tokenID = tid} = tid
 
 instance Show Token where
-    show token =
-        "Token "
-            ++ tokenID token
-            ++ " at ("
-            ++ show (tokenStart token)
-            ++ ", "
-            ++ show (tokenEnd token)
-            ++ ")"
+    show = tokenID
+    -- show token =
+    --     "Token "
+    --         ++ tokenID token
+    --         ++ " at ("
+    --         ++ show (tokenStart token)
+    --         ++ ", "
+    --         ++ show (tokenEnd token)
+    --         ++ ")"
 
 data TokenizeError = TokenizeError
     { tknrErrMsg :: String
