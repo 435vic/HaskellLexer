@@ -179,7 +179,11 @@ newTokenize' (c:cs) tokens
         let (word, rest) = span isAlphaNum cs
          in if c:word `elem` ["Entero", "Real"]
             then newTokenize' rest (newToken (c:word) "TYPE" tokens : tokens)
-            else newTokenize' rest (newToken (c:word) "VARIABLE" tokens : tokens)
+            else if c:word == "Programa"
+                then newTokenize' rest (newToken (c:word) "PROGRAM" tokens : tokens)
+                else if c:word == "principal" 
+                    then newTokenize' rest (newToken (c:word) "MAIN" tokens : tokens)
+                    else newTokenize' rest (newToken (c:word) "VARIABLE" tokens : tokens)
     | isDigit c || c == '.' =
         let (num, rest) = span (\x -> isDigit x || x `elem` ".eE") cs
          in if '.' `elem` num || 'e' `elem` num || 'E' `elem` num
@@ -208,8 +212,8 @@ grammar =
     Grammar
         { grammarStart = "program"
         , grammarRules =
-            [ ("program", [T "VARIABLE", T "LBRACE", NT "method", T "RBRACE"])
-            , ("method", [T "VARIABLE", T "LPAREN", T "RPAREN", T "LBRACE", NT "stmt", T "RBRACE"])
+            [ ("program", [T "PROGRAM", T "LBRACE", NT "method", T "RBRACE"])
+            , ("method", [T "MAIN", T "LPAREN", T "RPAREN", T "LBRACE", NT "stmt", T "RBRACE"])
             , ("stmt", [T "TYPE", T "VARIABLE", T "ASSIGN", NT "expr", T "SEMICOLON", NT "stmt"])
             , ("stmt", [])
             , ("expr", [NT "term", NT "expr'"])
