@@ -100,7 +100,7 @@ parse' grammar nt tokens st = useRules (productionsFor grammar nt) st
         | otherwise = Left $ ParseError (UnexpectedToken token) (trace "unexpected token" stack)
     parseRule (NT nonTerminal : rest) tkns stack = do
         (subtree, remainingTokens) <- parse' grammar nonTerminal tkns (NT nonTerminal : stack) Nothing
-        (subtrees, finalTokens) <- parseRule rest remainingTokens (NT nonTerminal : stack)
+        (subtrees, finalTokens) <- parseRule rest remainingTokens stack
         return (subtree : subtrees, finalTokens)
     parseRule _ [] stack = Left $ ParseError UnexpectedEndOfInput stack
 
